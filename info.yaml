@@ -1,11 +1,11 @@
 # Tiny Tapeout project information
 project:
-  title:        ""      # Project title
-  author:       ""      # Your name
-  discord:      ""      # Your discord username, for communication and automatically assigning you a Tapeout role (optional)
-  description:  ""      # One line description of what your project does
+  title:        "Mrudul and Wahhaj Demoscene F2025"      # Project title
+  author:       "Mrudul Suresh, Wahhaj Khan"      # Your name
+  discord:      "immrudul"      # Your discord username, for communication and automatically assigning you a Tapeout role (optional)
+  description:  "A cool Bad Time Sans Fight scene while representing UWaterloo with UW as the heart and a Goose as Sans."      # One line description of what your project does
   language:     "Verilog" # other examples include SystemVerilog, Amaranth, VHDL, etc
-  clock_hz:     0       # Clock frequency in Hz (or 0 if not applicable)
+  clock_hz:     10000000       # Clock frequency in Hz (or 0 if not applicable)
 
   # How many tiles your design occupies? A single tile is about 167x108 uM.
   tiles: "1x1"          # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
@@ -23,24 +23,24 @@ project:
 # This section is for the datasheet/website. Use descriptive names (e.g., RX, TX, MOSI, SCL, SEG_A, etc.).
 pinout:
   # Inputs
-  ui[0]: ""
-  ui[1]: ""
-  ui[2]: ""
-  ui[3]: ""
-  ui[4]: ""
+  ui[0]: "SPEED_BIT0"
+  ui[1]: "SPEED_BIT1"
+  ui[2]: "SPEED_BIT2"
+  ui[3]: "SPEED_BIT3"
+  ui[4]: "DIRECTION"
   ui[5]: ""
   ui[6]: ""
   ui[7]: ""
 
   # Outputs
-  uo[0]: ""
-  uo[1]: ""
-  uo[2]: ""
-  uo[3]: ""
-  uo[4]: ""
-  uo[5]: ""
-  uo[6]: ""
-  uo[7]: ""
+  uo[7]: "HSYNC"
+  uo[6]: "B0"
+  uo[5]: "G0"
+  uo[4]: "R0"
+  uo[3]: "VSYNC"
+  uo[2]: "B1"
+  uo[1]: "G1"
+  uo[0]: "R1"
 
   # Bidirectional pins
   uio[0]: ""
