@@ -1,95 +1,46 @@
-# SPDX-FileCopyrightText: © 2025
+# SPDX-FileCopyrightText: © 2024 Tiny Tapeout
 # SPDX-License-Identifier: Apache-2.0
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import Timer, RisingEdge
+from cocotb.triggers import Timer
 
-# =====================================================================
-# VGA PIN DECODE (matches your tt project pinout)
-# uo_out[7] = HSYNC
-# uo_out[6] = B0
-# uo_out[5] = G0
-# uo_out[4] = R0
-# uo_out[3] = VSYNC
-# uo_out[2] = B1
-# uo_out[1] = G1
-# uo_out[0] = R1
-# =====================================================================
+# Sine LUT values
+SINE_VALUES_TABLE = {
+    0: 50,
+    1: 40,
+    2: 30,
+    3: 20,
+    4: 10,
+    5: 0,
+    6: 10,
+    7: 20,
+    8: 30,
+    9: 40
+}
 
-def decode_rgb(uo_value: int):
-    """Return (R, G, B) as 2-bit values each."""
-    R = ((uo_value >> 4) & 1) | (((uo_value >> 0) & 1) << 1)
-    G = ((uo_value >> 5) & 1) | (((uo_value >> 1) & 1) << 1)
-    B = ((uo_value >> 6) & 1) | (((uo_value >> 2) & 1) << 1)
-    return R, G, B
+# Expected "U" shape
+expected_U = [
+    [1,1,1,0,0,0,0,0,1,1,1],
+    [1,1,1,0,0,0,0,0,1,1,1],
+    [1,1,1,0,0,0,0,0,1,1,1],
+    [1,1,1,0,0,0,0,0,1,1,1],
+    [1,1,1,0,0,0,0,0,1,1,1],
+    [1,1,1,0,0,0,0,0,1,1,1],
+    [1,1,1,0,0,0,0,0,1,1,1],
+    [1,1,1,0,0,0,0,0,1,1,1],
+    [1,1,1,0,0,0,0,0,1,1,1],
+    [1,1,1,0,0,0,0,0,1,1,1],
+    [1,1,1,0,0,0,0,0,1,1,1],
+    [1,1,1,0,0,0,0,0,1,1,1],
+    [1,1,1,0,0,0,0,0,1,1,1],
+    [0,1,1,0,0,0,0,0,1,1,0],
+    [0,0,1,1,0,0,0,1,1,0,0],
+    [0,0,0,1,1,1,1,1,0,0,0]
+]
 
-def bit(value, n):
-    return (value >> n) & 1
-
-
-# =====================================================================
-#  FRAME + SCANLINE SYNCHRONIZATION HELPERS
-# =====================================================================
-
-async def wait_for_vsync(dut):
-    """Wait for VSYNC rising edge."""
-    prev = bit(int(dut.uo_out.value), 3)
-    while True:
-        await Timer(1, "ns")
-        cur = bit(int(dut.uo_out.value), 3)
-        if prev == 0 and cur == 1:
-            return
-        prev = cur
-
-
-async def wait_for_hsync(dut):
-    """Wait for HSYNC rising edge."""
-    prev = bit(int(dut.uo_out.value), 7)
-    while True:
-        await Timer(1, "ns")
-        cur = bit(int(dut.uo_out.value), 7)
-        if prev == 0 and cur == 1:
-            return
-        prev = cur
-
-
-# =====================================================================
-#  VGA PIXEL SAMPLER
-# =====================================================================
-async def get_pixel(dut, target_x, target_y):
-    """
-    Return (R,G,B) at pixel (target_x,target_y).
-    Must sync to VSYNC then raster-scan.
-    """
-
-    # wait for new frame
-    await wait_for_vsync(dut)
-
-    x = 0
-    y = 0
-
-    # scan until we reach desired y
-    while y < target_y:
-        await wait_for_hsync(dut)
-        y += 1
-
-    # now on desired scanline → walk forward until target_x
-    while x < target_x:
-        await Timer(40, "ns")  # 25MHz pixel ⇒ 40ns per pixel
-        x += 1
-
-    # sample pixel at (x,y)
-    rgb = decode_rgb(int(dut.uo_out.value))
-    return rgb
-
-
-# =====================================================================
-#  EXPECTED PATTERNS
-# =====================================================================
-
-# From your original test
-expected_static_top = [
+# Expected static top line
+expected_static_top_line = [
     [0,0,0,0,0,1,1,1,1,0,0,0,0,0],
     [0,0,0,0,1,0,0,0,0,1,0,0,0,0],
     [0,0,0,1,0,0,0,0,0,0,1,0,0,0],
@@ -108,110 +59,131 @@ expected_static_top = [
     [0,0,0,1,1,1,0,0,0,1,1,1,0,0]
 ]
 
-
-# =====================================================================
-#  MAIN TEST SETUP
-# =====================================================================
-
+# ---------------- Clock and reset setup ----------------
 @cocotb.test()
 async def test_setup(dut):
-    dut._log.info("Starting clock at 25MHz...")
-    cocotb.start_soon(Clock(dut.clk, 40, "ns").start())  # 25 MHz
-    dut.rst_n.value = 0
-    dut.ena.value = 1
-    dut.ui_in.value = 0
+    dut._log.info("Starting setup...")
 
-    await Timer(200, "ns")
+    # Start clock at 25 MHz (20 ns period)
+    cocotb.start_soon(Clock(dut.clk, 20, units="ns").start())
+
+    # Reset
+    dut.rst_n.value = 0
+    await Timer(40, units="ns")
     dut.rst_n.value = 1
-    await Timer(200, "ns")
+    await Timer(20, units="ns")
 
     dut._log.info("RESET DONE")
 
-
-# =====================================================================
-#  TEST STATIC TOP LINE
-# =====================================================================
+# ---------------- Static top line test ----------------
 @cocotb.test()
 async def test_static_top_line(dut):
     dut._log.info("Testing static top line...")
 
-    # pattern starts at (250,10), each cell = 8×8 pixels
-    base_x = 250
-    base_y = 10
+    height = len(expected_static_top_line)
+    width  = len(expected_static_top_line[0])
 
-    for row in range(16):
-        for col in range(14):
-            expected = expected_static_top[row][col]
-            px = base_x + col * 8 + 4
-            py = base_y + row * 8 + 4
+    for y in range(10, height*8):
+        for x in range(250, width*8):
+            dut.pix_x_sim.value = x
+            dut.pix_y_sim.value = y
+            await Timer(1, units="ns")
 
-            R,G,B = await get_pixel(dut, px, py)
-            actual = 1 if (R|G|B) else 0
+            actual = bool(dut.draw_line_sim.value)
+            expected = bool(expected_static_top_line[y//8][x//8])
 
-            assert actual == expected, \
-                f"Static top mismatch @ row={row} col={col}, got {actual} expected {expected}"
+            assert actual == expected, f"Static top line fail at ({x},{y}): got {actual}, expected {expected}"
 
-    dut._log.info("STATIC TOP LINE PASSED ✔")
+    dut._log.info("static_top_line passed")
 
+# ---------------- "U" helper ----------------
+async def u_shape_helper(dut, x_coord, y_coord, isUW):
+    height = len(expected_U)
+    width  = len(expected_U[0])
 
-# =====================================================================
-#  TEST PLAYER ("UW")
-# =====================================================================
+    dut.x_pos_sim.value = x_coord
+    dut.y_pos_sim.value = y_coord
+
+    for y in range(height):
+        for x in range(width):
+            dut.pix_x_sim.value = x_coord - 5 + x
+            dut.pix_y_sim.value = y_coord - 10 + y
+            await Timer(1, units="ns")
+
+            actual = bool(dut.draw_player_sim.value) if isUW else bool(dut.draw_U_sim.value)
+            expected = bool(expected_U[y][x])
+
+            assert actual == expected, f"U shape fail at ({x},{y}): got {actual}, expected {expected}"
+
+# ---------------- Player test ----------------
 @cocotb.test()
 async def test_player(dut):
-    dut._log.info("Testing player render...")
+    dut._log.info("Start player test")
 
-    # Player fixed X positions in your design
-    U0 = 200
-    U1 = 217
-    U2 = 227
+    x_coord = 200
+    y_coord = 100
+    await u_shape_helper(dut, x_coord, y_coord, True)
+    dut._log.info("Passed 1 U")
 
-    # sample ~100px below top_line
-    y = 250
+    x_coord += 17
+    await u_shape_helper(dut, x_coord, y_coord, True)
+    dut._log.info("Passed 2 U")
 
-    # Just verify something is drawn (white pixel)
-    for X in [U0, U1, U2]:
-        R,G,B = await get_pixel(dut, X, y)
-        assert (R|G|B) != 0, f"No player pixel found at x={X},y={y}"
+    x_coord += 10
+    await u_shape_helper(dut, x_coord, y_coord, True)
+    dut._log.info("Passed 3 U")
 
-    dut._log.info("PLAYER SHAPE PASSED ✔")
+    dut._log.info("player passed")
 
+# ---------------- U shape test ----------------
+@cocotb.test()
+async def test_U_shape(dut):
+    dut._log.info("Start U_shape test")
+    await u_shape_helper(dut, 100, 100, False)
+    dut._log.info("U_shape passed")
 
-# =====================================================================
-#  TEST DOUBLE SINE
-# =====================================================================
+# ---------------- Double sine wave test ----------------
+TOP_X        = 100
+TOP_Y        = 180
+BOTTOM_X     = 540
+BOTTOM_Y     = 400
+BAR_WIDTH    = 40
+VISIBLE_WIDTH= 25
+HEIGHT       = 60
+
 @cocotb.test()
 async def test_double_sin(dut):
-    dut._log.info("Testing double sine...")
+    dut._log.info("Start double_sin test")
 
-    # Known visible window
-    for x in range(120, 540, 40):
-        for y in range(220, 360, 30):
-            R,G,B = await get_pixel(dut, x, y)
-            # double-sine produces bright white bars
-            assert (R|G|B) != 0, f"Expected sine pixel at ({x},{y})"
+    for x_offset in range(0, 400, 20):
+        for pix_x in range(TOP_X+1, BOTTOM_X):
+            for pix_y in range(TOP_Y+1, BOTTOM_Y):
+                sin_height = SINE_VALUES_TABLE[((pix_x + x_offset)//BAR_WIDTH) % 10]
+                correct_y_pos = (TOP_Y + 50 - sin_height + HEIGHT > pix_y) or (pix_y > BOTTOM_Y - sin_height - HEIGHT)
+                correct_x_pos = (pix_x + x_offset) % BAR_WIDTH < VISIBLE_WIDTH
 
-    dut._log.info("DOUBLE SINE PASSED ✔")
+                dut.pix_x_sim.value = pix_x
+                dut.pix_y_sim.value = pix_y
+                dut.x_offset_sim.value = x_offset
+                await Timer(1, units="ns")
 
+                actual = bool(dut.draw_double_sin_sim.value)
+                expected = correct_y_pos and correct_x_pos
 
-# =====================================================================
-#  TEST SINE LUT (observed via player y offset)
-# =====================================================================
+                assert actual == expected, f"Double sin fail at ({pix_x},{pix_y}) offset {x_offset}: got {actual}, expected {expected}"
+
+    dut._log.info("double_sin passed")
+
+# ---------------- Sine LUT test ----------------
 @cocotb.test()
-async def test_sine_lut_visible(dut):
-    dut._log.info("Testing sine LUT indirectly through player motion...")
+async def test_sine_lut(dut):
+    dut._log.info("Start sine_lut test")
 
-    # change speed (which feeds LUT index)
-    for idx in range(10):
-        dut.ui_in.value = idx  # speed bits = lut index
-        await Timer(20_000, "ns")  # wait a few frames
+    for index, value in SINE_VALUES_TABLE.items():
+        dut.tb_pos_sim.value = index
+        await Timer(1, units="ns")
+        actual = int(dut.tb_sin_output_sim.value)
+        dut._log.info(f"pos={index} → sin_output={actual}, value={value}")
+        assert actual == value, f"Sine LUT fail at index {index}: got {actual}, expected {value}"
 
-        # player center X
-        x = 200
-        # measure Y pixel brightness
-        R,G,B = await get_pixel(dut, x, 290)
-        brightness = R|G|B
-
-        assert brightness != 0, f"LUT motion invalid at idx={idx}"
-
-    dut._log.info("SINE LUT VISIBLE TEST PASSED ✔")
+    dut._log.info("sine_lut passed")
